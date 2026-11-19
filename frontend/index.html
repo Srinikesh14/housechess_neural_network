@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f4f0">
+    <title>House Chess</title>
+    <link rel="stylesheet" href="style.css?v=4">
+  </head>
+  <body>
+    <div class="app-frame">
+      <aside class="sidebar">
+        <a class="brand" href="#" data-screen="home" aria-label="House Chess home">
+          <span class="brand-mark" aria-hidden="true">♞</span>
+          <span>house<span class="brand-light">chess</span></span>
+        </a>
+        <div class="sidebar-label">PLAY</div>
+        <nav class="main-nav" aria-label="Main navigation">
+          <button class="nav-link active" type="button" data-screen="home"><span class="nav-icon">⌂</span> Home</button>
+          <button class="nav-link" type="button" data-screen="history"><span class="nav-icon">◷</span> Game history</button>
+          <button class="nav-link" type="button" data-screen="settings"><span class="nav-icon">⚙</span> Settings</button>
+        </nav>
+        <div class="sidebar-spacer"></div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumbs"><span>House Chess</span><span class="crumb-slash">/</span><strong id="page-title">Home</strong></div>
+          <div class="topbar-right">
+            <button id="theme-quick-button" class="icon-button" type="button" aria-label="Enable dark mode" title="Enable dark mode">◐</button>
+          </div>
+        </header>
+
+        <section id="home-screen" class="screen">
+          <div class="welcome-row">
+            <div>
+              <p class="eyebrow">YOUR CHESS SPACE</p>
+              <h1>Make your next move.</h1>
+              <p class="page-subtitle">A quiet place to play, practice, and enjoy the game.</p>
+            </div>
+            <div class="welcome-piece" aria-hidden="true">♞</div>
+          </div>
+
+          <div class="mode-grid">
+            <article class="mode-card ai-card">
+              <div class="mode-card-top">
+                <span class="mode-icon">✳</span>
+                <span class="mode-tag">NEURAL NETWORK</span>
+              </div>
+              <h2>Play vs AI</h2>
+              <p>Take on the project's neural network. Choose your side and set a clock before the game begins.</p>
+              <div class="setup-group">
+                <span class="setup-label">I want to play as</span>
+                <div class="segmented" role="group" aria-label="Choose your color">
+                  <button type="button" class="choice-button selected" data-color="white">♔ White</button>
+                  <button type="button" class="choice-button" data-color="black">♚ Black</button>
+                  <button type="button" class="choice-button" data-color="random">Random</button>
+                </div>
+              </div>
+              <div class="setup-group">
+                <label class="setup-label" for="ai-time-control">Time control</label>
+                <select id="ai-time-control" class="select-control">
+                  <option value="0">No clock</option>
+                  <option value="300">5 minutes</option>
+                  <option value="600">10 minutes</option>
+                  <option value="900">15 minutes</option>
+                </select>
+              </div>
+              <button id="start-ai-button" class="primary-button full-button" type="button">Start game <span>→</span></button>
+            </article>
+
+            <article class="mode-card friend-card">
+              <div class="mode-card-top">
+                <span class="mode-icon friend-icon">♟</span>
+                <span class="mode-tag">LOCAL MULTIPLAYER</span>
+              </div>
+              <h2>Play a friend</h2>
+              <p>Share the board and take turns from the same screen. Pass the device after every move.</p>
+              <div class="friend-preview">
+                <span class="mini-player"><span class="mini-avatar white-avatar">1</span> White</span>
+                <span class="versus">VS</span>
+                <span class="mini-player"><span class="mini-avatar dark-avatar">2</span> Black</span>
+              </div>
+              <div class="setup-group">
+                <label class="setup-label" for="friend-time-control">Time control</label>
+                <select id="friend-time-control" class="select-control">
+                  <option value="0">No clock</option>
+                  <option value="300">5 minutes</option>
+                  <option value="600">10 minutes</option>
+                  <option value="900">15 minutes</option>
+                </select>
+              </div>
+              <button id="start-friend-button" class="secondary-button full-button" type="button">Start two-player game <span>→</span></button>
+            </article>
+          </div>
+
+          <section class="recent-section">
+            <div class="section-heading">
+              <div><p class="eyebrow">RECENT ACTIVITY</p><h2>Your games</h2></div>
+              <button class="text-button" type="button" data-screen="history">View all <span>→</span></button>
+            </div>
+            <div id="recent-games" class="recent-list"></div>
+          </section>
+          <p id="home-error" class="error-message" role="alert"></p>
+        </section>
+
+        <section id="game-screen" class="screen hidden">
+          <div class="game-page-heading">
+            <div>
+              <button class="back-link" type="button" data-screen="home">← Back to home</button>
+              <h1 id="game-heading">Play vs AI</h1>
+            </div>
+            <div class="game-heading-actions">
+              <button id="flip-board-button" class="subtle-button" type="button" title="Flip the board">↕ <span>Flip board</span></button>
+              <button id="new-game-button" class="subtle-button" type="button">＋ <span>New game</span></button>
+            </div>
+          </div>
+
+          <div class="game-layout">
+            <div class="board-column">
+              <div class="player-strip opponent-strip" id="opponent-strip">
+                <div class="player-id"><span class="player-piece black-piece-icon" id="opponent-piece">♚</span><span><strong id="opponent-name">Neural Network</strong><small id="opponent-caption">Black</small></span></div>
+                <div class="clock" id="black-clock">--:--</div>
+              </div>
+              <div class="board-wrap">
+                <div id="chessboard" class="chessboard" role="grid" aria-label="Chess board"></div>
+                <div id="board-overlay" class="board-overlay hidden">
+                  <div class="result-card">
+                    <span id="result-icon" class="result-icon">♔</span>
+                    <p class="eyebrow">GAME COMPLETE</p>
+                    <h2 id="result-title">White wins</h2>
+                    <p id="result-detail">Checkmate</p>
+                    <button id="result-home-button" class="primary-button" type="button">Back to home</button>
+                  </div>
+                </div>
+              </div>
+              <div class="player-strip self-strip">
+                <div class="player-id"><span class="player-piece white-piece-icon" id="self-piece">♔</span><span><strong id="self-name">You</strong><small id="self-caption">White</small></span></div>
+                <div class="clock" id="white-clock">--:--</div>
+              </div>
+              <div id="game-status" class="game-status" aria-live="polite">White to move</div>
+            </div>
+
+            <aside class="game-sidebar">
+              <div class="panel-card move-panel">
+                <div class="panel-heading"><div><p class="eyebrow">LIVE MATCH</p><h2>Move history</h2></div><span id="move-count" class="count-pill">0</span></div>
+                <div id="move-list" class="move-list"><div class="empty-moves">Your opening move starts here.</div></div>
+              </div>
+              <div class="panel-card captured-panel">
+                <div class="panel-heading"><div><p class="eyebrow">CAPTURED PIECES</p><h2>Material</h2></div></div>
+                <div class="material-row"><span class="material-side">White</span><span id="white-captured" class="captured-pieces">—</span></div>
+                <div class="material-row"><span class="material-side">Black</span><span id="black-captured" class="captured-pieces">—</span></div>
+              </div>
+              <div id="evaluation-panel" class="panel-card evaluation-panel">
+                <div class="panel-heading"><div><p class="eyebrow">MODEL INSIGHT</p><h2>Position score</h2></div><span id="model-indicator" class="model-indicator">AI</span></div>
+                <div class="evaluation-row"><span>White</span><strong id="score-value">—</strong><span>Black</span></div>
+                <div class="evaluation-track"><div id="score-marker"></div></div>
+                <p id="score-note" class="score-note">Position score from the neural network.</p>
+              </div>
+              <div class="game-controls">
+                <button id="undo-button" class="control-button" type="button"><span>↶</span> Undo move</button>
+                <button id="draw-button" class="control-button" type="button"><span>＝</span> Offer draw</button>
+                <button id="resign-button" class="control-button resign-control" type="button"><span>⚑</span> Resign</button>
+              </div>
+              <p id="game-error" class="error-message" role="alert"></p>
+            </aside>
+          </div>
+        </section>
+
+        <section id="history-screen" class="screen hidden">
+          <div class="screen-heading">
+            <p class="eyebrow">YOUR RECORD</p>
+            <h1>Game history</h1>
+            <p class="page-subtitle">Your finished games are saved on this device.</p>
+          </div>
+          <div id="history-summary" class="history-summary"></div>
+          <div class="panel-card history-panel">
+            <div class="history-table-heading"><span>GAME</span><span>RESULT</span><span>DATE</span><span></span></div>
+            <div id="history-list"></div>
+          </div>
+          <div id="history-empty" class="empty-history hidden"><span>♘</span><h2>Your next game awaits</h2><p>Finished games will appear here.</p><button class="primary-button" type="button" data-screen="home">Start a game</button></div>
+        </section>
+
+        <section id="settings-screen" class="screen hidden">
+          <div class="screen-heading">
+            <p class="eyebrow">MAKE IT YOURS</p>
+            <h1>Settings</h1>
+            <p class="page-subtitle">Your preferences stay saved on this device.</p>
+          </div>
+          <div class="settings-card">
+            <div class="setting-row">
+              <div><h2>Board theme</h2><p>Choose the colors for your chessboard.</p></div>
+              <div id="theme-options" class="theme-options" role="group" aria-label="Board theme">
+                <button class="theme-choice selected" type="button" data-theme="classic"><span class="theme-swatch classic-swatch"></span><span>Classic</span></button>
+                <button class="theme-choice" type="button" data-theme="slate"><span class="theme-swatch slate-swatch"></span><span>Slate</span></button>
+                <button class="theme-choice" type="button" data-theme="blue"><span class="theme-swatch blue-swatch"></span><span>Blue</span></button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><h2>Dark mode</h2><p>Use a darker appearance across the app.</p></div>
+              <label class="switch"><input id="dark-mode-toggle" type="checkbox"><span class="switch-slider"></span></label>
+            </div>
+            <div class="setting-row">
+              <div><h2>Sound</h2><p>Play a subtle sound after each move.</p></div>
+              <label class="switch"><input id="sound-toggle" type="checkbox"><span class="switch-slider"></span></label>
+            </div>
+            <div class="setting-row">
+              <div><h2>Game records</h2><p>Clear locally saved finished games from this device.</p></div>
+              <button id="clear-history-button" class="danger-button" type="button">Clear history</button>
+            </div>
+          </div>
+          <p class="settings-footnote">House Chess runs locally. Game history and preferences are stored in this browser.</p>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="promotion-dialog" class="app-dialog">
+      <form method="dialog">
+        <p class="eyebrow">PROMOTION</p>
+        <h2>Choose a piece</h2>
+        <div id="promotion-options" class="promotion-options"></div>
+        <button class="dialog-cancel" value="cancel">Cancel</button>
+      </form>
+    </dialog>
+
+    <dialog id="confirm-dialog" class="app-dialog">
+      <form method="dialog">
+        <p class="eyebrow" id="confirm-eyebrow">CONFIRM</p>
+        <h2 id="confirm-title">Are you sure?</h2>
+        <p id="confirm-message" class="dialog-message"></p>
+        <div class="dialog-actions">
+          <button class="subtle-button" value="cancel">Keep playing</button>
+          <button id="confirm-action-button" class="danger-button" value="confirm">Confirm</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="script.js?v=6"></script>
+  </body>
+</html>
