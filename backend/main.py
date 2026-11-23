@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import chess
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from pathlib import Path
 
-from backend.encoder import encode_board
+from backend.encoder import INPUT_SIZE, LEGACY_INPUT_SIZE, encode_board, encode_board_v1
 from backend.mlp import MLP
 
 app = FastAPI(title="Chess ANN", description="Educational NumPy chess evaluator")
@@ -20,9 +22,44 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MODEL_PATH = Path(__file__).with_name("model.npz")
-model = MLP.load(MODEL_PATH) if MODEL_PATH.is_file() else MLP(seed=7)
-model_status = "trained" if MODEL_PATH.is_file() else "untrained-random-initialization"
+MODEL_VERSION = os.environ.get("CHESS_ANN_MODEL_VERSION", "v1").lower()
+if MODEL_VERSION not in ("v1", "v2", "wsp"):
+    raise ValueError("CHESS_ANN_MODEL_VERSION must be 'v1', 'v2', or 'wsp'.")
+MODEL_PATHS = {
+    "v1": Path(__file__).with_name("models") / "model_v1_original.npz",
+    "v2": Path(__file__).with_name("models") / "model_v2_stockfish.npz",
+}
+if MODEL_VERSION == "wsp":
+    wsp_model_path = os.environ.get("CHESS_ANN_WSP_MODEL_PATH")
+    if not wsp_model_path:
+        raise ValueError(
+            "Set CHESS_ANN_WSP_MODEL_PATH to an explicitly accepted WSP model."
+        )
+    MODEL_PATHS["wsp"] = Path(wsp_model_path)
+if MODEL_VERSION == "v1" and not MODEL_PATHS["v1"].is_file():
+    MODEL_PATHS["v1"] = Path(__file__).with_name("model.npz")
+MODEL_PATH = MODEL_PATHS[MODEL_VERSION]
+if MODEL_PATH.is_file():
+    model = MLP.load(MODEL_PATH)
+    expected_size = LEGACY_INPUT_SIZE if MODEL_VERSION == "v1" else INPUT_SIZE
+    if model.W1.shape[0] != expected_size:
+        raise ValueError(
+            f"Selected {MODEL_VERSION} model must use {expected_size} input features, "
+            f"received {model.W1.shape[0]}."
+        )
+    model_status = {
+        "v1": "trained",
+        "v2": "trained-v2",
+        "wsp": "accepted-wsp",
+    }[MODEL_VERSION]
+else:
+    if MODEL_VERSION in ("v2", "wsp"):
+        raise FileNotFoundError(
+            f"Selected {MODEL_VERSION} model not found at {MODEL_PATH}; "
+            "provide the model before selecting this version."
+        )
+    model = MLP(seed=7)
+    model_status = "untrained-random-initialization"
 
 
 class PositionRequest(BaseModel):
@@ -40,8 +77,16 @@ def parse_board(fen: str) -> chess.Board:
         raise HTTPException(status_code=422, detail=f"Invalid FEN: {error}") from error
 
 
+def encode_for_model(board: chess.Board):
+    if model.W1.shape[0] == LEGACY_INPUT_SIZE:
+        return encode_board_v1(board)
+    if model.W1.shape[0] == INPUT_SIZE:
+        return encode_board(board)
+    raise ValueError(f"Unsupported model input dimension: {model.W1.shape[0]}")
+
+
 def get_evaluation(board: chess.Board) -> tuple[float, float]:
-    white_score = model.forward(encode_board(board))
+    white_score = model.forward(encode_for_model(board))
     turn_score = white_score if board.turn == chess.WHITE else -white_score
     return white_score, turn_score
 
@@ -122,7 +167,7 @@ def best_move(request: PositionRequest) -> dict[str, str | float]:
     selected_score: float | None = None
     for move in legal:
         board.push(move)
-        white_score = model.forward(encode_board(board))
+        white_score = model.forward(encode_for_model(board))
         mover_score = white_score if moving_color == chess.WHITE else -white_score
         board.pop()
         if selected_score is None or mover_score > selected_score:

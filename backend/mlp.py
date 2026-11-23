@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
+
+from backend.encoder import INPUT_SIZE, LEGACY_INPUT_SIZE
 
 
 @dataclass
@@ -23,11 +27,11 @@ class Gradients:
 
 
 class MLP:
-    """773 -> 256 -> 64 -> 1 network with ReLU, ReLU, and tanh activations."""
+    """NumPy network with ReLU, ReLU, and tanh activations."""
 
     def __init__(
         self,
-        input_size: int = 773,
+        input_size: int = INPUT_SIZE,
         hidden1_size: int = 256,
         hidden2_size: int = 64,
         seed: int | None = None,
@@ -114,18 +118,38 @@ class MLP:
         return gradients.loss
 
     def save(self, path: str | Path) -> None:
-        """Save the network's parameters in a non-pickle NumPy archive."""
+        """Atomically save parameters and the inferred input representation version."""
         destination = Path(path)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(
-            destination,
-            W1=self.W1,
-            b1=self.b1,
-            W2=self.W2,
-            b2=self.b2,
-            W3=self.W3,
-            b3=self.b3,
+        version = 1 if self.W1.shape[0] == LEGACY_INPUT_SIZE else (
+            2 if self.W1.shape[0] == INPUT_SIZE else 0
         )
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                suffix=".npz",
+                prefix=f".{destination.stem}-",
+                dir=destination.parent,
+                delete=False,
+            ) as temporary:
+                temporary_path = Path(temporary.name)
+                np.savez_compressed(
+                    temporary,
+                    W1=self.W1,
+                    b1=self.b1,
+                    W2=self.W2,
+                    b2=self.b2,
+                    W3=self.W3,
+                    b3=self.b3,
+                    model_version=np.asarray(version, dtype=np.int64),
+                )
+                temporary.flush()
+                os.fsync(temporary.fileno())
+            os.replace(temporary_path, destination)
+        finally:
+            if temporary_path is not None and temporary_path.exists():
+                temporary_path.unlink()
 
     @classmethod
     def load(cls, path: str | Path) -> MLP:
@@ -139,6 +163,11 @@ class MLP:
                 name: np.asarray(archive[name], dtype=np.float64).copy()
                 for name in required
             }
+            model_version = (
+                int(archive["model_version"])
+                if "model_version" in archive
+                else None
+            )
 
         W1, b1 = parameters["W1"], parameters["b1"]
         W2, b2 = parameters["W2"], parameters["b2"]
@@ -151,6 +180,10 @@ class MLP:
             raise ValueError("Model's second and output layer dimensions do not match.")
         if b3.shape != (1,):
             raise ValueError("Model's output bias must have shape (1,).")
+        if model_version == 1 and W1.shape[0] != LEGACY_INPUT_SIZE:
+            raise ValueError("Model metadata declares V1 but its input dimension is not 773.")
+        if model_version == 2 and W1.shape[0] != INPUT_SIZE:
+            raise ValueError("Model metadata declares V2 but its input dimension is not 838.")
         if not all(np.all(np.isfinite(value)) for value in parameters.values()):
             raise ValueError("Model parameters must all be finite.")
 
