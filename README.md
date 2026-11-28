@@ -22,6 +22,8 @@ The browser app supports AI or local two-player games, clocks, undo, draw/resign
 
 The UI lets you choose White, Black, or a random color against the AI, or start a local two-player game. It supports no clock or 5/10/15-minute clocks, legal-move highlighting, promotion choice, undo, draw/resign, board flipping, captured pieces, check status, and move notation. Finished games, theme, and sound preferences are stored in browser-local storage. This is local play, not online multiplayer or account synchronization.
 
+On the Play vs AI card, select either the preserved **V1 Original** model or the **V2 Stockfish-trained** model. The selection is sent with each evaluation and best-move request, so both versions remain loaded and available in the same backend process; it is saved with the active game and its history entry. The **INFO** button describes their architectures and input representations. V2 is not guaranteed to play stronger than V1.
+
 ## Install and run the application
 
 From the `chess-ann-project` directory, create/activate the environment and install dependencies:
@@ -128,14 +130,14 @@ The V2 model file must exist before running the comparison. A lower training los
 
 ## Select the model in the API
 
-The API defaults to V1 to preserve existing behavior. After V2 has been trained:
+The API keeps V1 as its default for older clients, and also loads V2 when its checkpoint is available. The frontend explicitly requests its selected version. To change the default used by API clients that omit `model_version`:
 
 ```powershell
 $env:CHESS_ANN_MODEL_VERSION = "v2"
 python -m uvicorn backend.main:app --reload
 ```
 
-Set `CHESS_ANN_MODEL_VERSION` to `v1` or remove it to use the original model and its matching 773-feature encoder. Use `v2` for the trained Stockfish-supervised model; `wsp` requires the explicit accepted-model path shown below.
+Set `CHESS_ANN_MODEL_VERSION` to `v1` or `v2` for the default model used by API clients that omit `model_version`. `POST /api/evaluate` and `POST /api/best-move` accept an optional `model_version` of `v1` or `v2`. The health endpoint lists loaded models. `wsp` remains available only when explicitly configured to an accepted-model path.
 
 ## Experimental LLM Weight-Space Programming
 

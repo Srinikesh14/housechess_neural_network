@@ -23,6 +23,8 @@ let lastClockTick = Date.now();
 let lastClockSave = Date.now();
 let apiConnected = false;
 let playerColorChoice = "white";
+let selectedModelVersion = "v1";
+let availableModels = {};
 
 const $ = selector => document.querySelector(selector);
 const boardElement = $("#chessboard");
@@ -50,11 +52,13 @@ function getSettings() {
   return {
     theme: ["classic", "slate", "blue"].includes(saved.theme) ? saved.theme : "classic",
     darkMode: saved.darkMode === true,
-    sound: saved.sound === true
+    sound: saved.sound === true,
+    modelVersion: ["v1", "v2"].includes(saved.modelVersion) ? saved.modelVersion : "v1"
   };
 }
 
 let settings = getSettings();
+selectedModelVersion = settings.modelVersion;
 
 async function api(path, body) {
   const options = body === undefined ? {} : {
@@ -196,7 +200,9 @@ function renderPlayers() {
   const playerColor = game.playerColor || "w";
   const opponentColor = playerColor === "w" ? "b" : "w";
   $("#game-heading").textContent = aiMode ? "Play vs AI" : "Two-player game";
-  $("#opponent-name").textContent = aiMode ? "Neural Network" : "Player";
+  $("#opponent-name").textContent = aiMode
+    ? `Neural Network ${game.modelVersion.toUpperCase()}`
+    : "Player";
   $("#opponent-caption").textContent = opponentColor === "w" ? "White" : "Black";
   $("#self-name").textContent = "You";
   $("#self-caption").textContent = playerColor === "w" ? "White" : "Black";
@@ -204,7 +210,7 @@ function renderPlayers() {
   $("#self-piece").textContent = playerColor === "w" ? "♔" : "♚";
   $("#opponent-strip").classList.toggle("active-player", getActiveColor() === opponentColor);
   $(".self-strip").classList.toggle("active-player", getActiveColor() === playerColor);
-  $("#model-indicator").textContent = aiMode ? "AI" : "OFF";
+  $("#model-indicator").textContent = aiMode ? game.modelVersion.toUpperCase() : "OFF";
   $("#evaluation-panel").classList.toggle("disabled-panel", !aiMode);
 }
 
@@ -279,7 +285,7 @@ function renderStatus() {
   const text = game.finished
     ? `${game.resultText}${game.termination ? ` · ${game.termination}` : ""}`
     : isAiTurn
-      ? "Neural network is thinking…"
+      ? `Neural network ${game.modelVersion.toUpperCase()} is thinking…`
       : `${active} to move${game.checkSquare ? " · Check" : ""}`;
   $("#game-status").textContent = text;
   const waitingForBlackToMove = game.mode === "ai" &&
@@ -319,10 +325,14 @@ async function refreshPosition() {
   renderGame();
   if (game.mode === "ai") {
     try {
-      const evaluation = await api("/evaluate", { fen: game.fen });
+      const evaluation = await api("/evaluate", {
+        fen: game.fen,
+        model_version: game.modelVersion
+      });
       $("#score-value").textContent = evaluation.white_score.toFixed(3);
       $("#score-marker").style.left = `${((evaluation.white_score + 1) / 2) * 100}%`;
-      $("#score-note").textContent = `Side to move: ${evaluation.side_to_move_score.toFixed(3)}.`;
+      $("#score-note").textContent =
+        `${evaluation.model_version.toUpperCase()} · side to move: ${evaluation.side_to_move_score.toFixed(3)}.`;
     } catch (error) {
       $("#score-note").textContent = "Position score is temporarily unavailable.";
       throw error;
@@ -342,6 +352,7 @@ function storeGameResult() {
   history.unshift({
     id: game.id,
     mode: game.mode,
+    modelVersion: game.modelVersion || null,
     playerColor: game.playerColor,
     result: game.result,
     resultText: game.resultText,
@@ -395,7 +406,7 @@ function startClock() {
   if (game?.clockEnabled) clockTimer = setInterval(clockStep, 250);
 }
 
-function createGame(mode, color, clockMinutes) {
+function createGame(mode, color, clockMinutes, modelVersion = "v1") {
   const chosenColor = color === "random"
     ? (Math.random() < 0.5 ? "w" : "b")
     : color === "white" ? "w" : color === "black" ? "b" : color;
@@ -403,6 +414,7 @@ function createGame(mode, color, clockMinutes) {
   game = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     mode,
+    modelVersion: mode === "ai" ? modelVersion : null,
     playerColor: mode === "ai" ? chosenColor : "w",
     fen: START_FEN,
     moves: [],
@@ -428,7 +440,7 @@ function createGame(mode, color, clockMinutes) {
   });
 }
 
-async function startNewGame(mode, color, clockMinutes) {
+async function startNewGame(mode, color, clockMinutes, modelVersion = "v1") {
   const saved = readStorage(STORAGE.activeGame, null);
   if (saved && !saved.finished) {
     const confirmed = await showConfirmation({
@@ -439,7 +451,7 @@ async function startNewGame(mode, color, clockMinutes) {
     });
     if (!confirmed) return;
   }
-  createGame(mode, color, clockMinutes);
+  createGame(mode, color, clockMinutes, modelVersion);
 }
 
 function snapshotGame() {
@@ -510,7 +522,10 @@ async function maybePlayAiTurn() {
   const position = game.fen;
   await new Promise(resolve => setTimeout(resolve, 1000));
   if (!game || game.finished || game.id !== gameId || game.fen !== position) return;
-  const move = await api("/best-move", { fen: position });
+  const move = await api("/best-move", {
+    fen: position,
+    model_version: game.modelVersion
+  });
   if (!game || game.finished || game.id !== gameId || game.fen !== position) return;
   await applyMove(move.uci);
 }
@@ -687,6 +702,9 @@ async function maybeResumeGame() {
   game.snapshots = Array.isArray(game.snapshots) ? game.snapshots : [];
   game.clocks = game.clocks || { ...INITIAL_CLOCKS };
   game.playerColor = game.playerColor || "w";
+  game.modelVersion = game.mode === "ai" && ["v1", "v2"].includes(game.modelVersion)
+    ? game.modelVersion
+    : game.mode === "ai" ? "v1" : null;
   game.lastMove = game.lastMove || null;
   game.checkSquare = game.checkSquare || null;
   flipped = game.mode === "ai" && game.playerColor === "b";
@@ -723,7 +741,9 @@ function createHistoryRow(entry, detailed = false) {
   const details = document.createElement("span");
   details.className = "history-game-name";
   const name = document.createElement("strong");
-  name.textContent = entry.mode === "ai" ? "vs Neural Network" : "Two-player game";
+  name.textContent = entry.mode === "ai"
+    ? `vs Neural Network ${(entry.modelVersion || "v1").toUpperCase()}`
+    : "Two-player game";
   const sub = document.createElement("small");
   sub.textContent = `${entry.moves?.length || 0} moves · ${formatDuration(entry.startedAt, entry.endedAt)}`;
   details.append(name, sub);
@@ -810,6 +830,9 @@ function renderHome() {
       game = active;
       game.snapshots = Array.isArray(game.snapshots) ? game.snapshots : [];
       game.clocks = game.clocks || { ...INITIAL_CLOCKS };
+      game.modelVersion = game.mode === "ai" && ["v1", "v2"].includes(game.modelVersion)
+        ? game.modelVersion
+        : game.mode === "ai" ? "v1" : null;
       flipped = game.mode === "ai" && game.playerColor === "b";
       showScreen("game");
       startClock();
@@ -822,8 +845,21 @@ function renderHome() {
   }
 }
 
-function renderConnection(connected) {
+function renderConnection(connected, models = {}) {
   apiConnected = connected;
+  availableModels = models;
+  const modelSelect = $("#ai-model-version");
+  if (!modelSelect) return;
+  for (const option of modelSelect.options) {
+    option.disabled = !availableModels[option.value];
+  }
+  if (apiConnected && !availableModels[selectedModelVersion]) {
+    selectedModelVersion = availableModels.v1 ? "v1" : "v2";
+  }
+  if (["v1", "v2"].includes(selectedModelVersion)) {
+    modelSelect.value = selectedModelVersion;
+  }
+  modelSelect.disabled = !apiConnected;
 }
 
 function playMoveSound() {
@@ -872,7 +908,28 @@ $("#start-ai-button").addEventListener("click", () => {
     return;
   }
   $("#home-error").textContent = "";
-  startNewGame("ai", playerColorChoice, $("#ai-time-control").value);
+  selectedModelVersion = $("#ai-model-version").value;
+  settings.modelVersion = selectedModelVersion;
+  saveSettings();
+  startNewGame(
+    "ai",
+    playerColorChoice,
+    $("#ai-time-control").value,
+    selectedModelVersion
+  );
+});
+
+$("#ai-model-version").addEventListener("change", event => {
+  selectedModelVersion = event.target.value;
+  settings.modelVersion = selectedModelVersion;
+  saveSettings();
+});
+
+$("#model-info-button").addEventListener("click", () => {
+  $("#model-info-dialog").showModal();
+});
+$("#model-info-close").addEventListener("click", () => {
+  $("#model-info-dialog").close();
 });
 
 $("#start-friend-button").addEventListener("click", () => {
@@ -934,6 +991,9 @@ $("#confirm-dialog").addEventListener("click", event => {
 $("#promotion-dialog").addEventListener("click", event => {
   if (event.target === $("#promotion-dialog")) $("#promotion-dialog").close("cancel");
 });
+$("#model-info-dialog").addEventListener("click", event => {
+  if (event.target === $("#model-info-dialog")) $("#model-info-dialog").close();
+});
 
 function showError(message) {
   const target = $("#game-screen").classList.contains("hidden") ? $("#home-error") : $("#game-error");
@@ -944,8 +1004,8 @@ async function initialize() {
   initializeSettings();
   renderHome();
   try {
-    await api("/health");
-    renderConnection(true);
+    const health = await api("/health");
+    renderConnection(true, health.available_models || {});
   } catch {
     renderConnection(false);
     $("#home-error").textContent = "Chess server is offline. Start FastAPI to play.";

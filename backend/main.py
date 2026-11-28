@@ -25,7 +25,7 @@ app.add_middleware(
 MODEL_VERSION = os.environ.get("CHESS_ANN_MODEL_VERSION", "v1").lower()
 if MODEL_VERSION not in ("v1", "v2", "wsp"):
     raise ValueError("CHESS_ANN_MODEL_VERSION must be 'v1', 'v2', or 'wsp'.")
-MODEL_PATHS = {
+MODEL_PATHS: dict[str, Path] = {
     "v1": Path(__file__).with_name("models") / "model_v1_original.npz",
     "v2": Path(__file__).with_name("models") / "model_v2_stockfish.npz",
 }
@@ -36,34 +36,50 @@ if MODEL_VERSION == "wsp":
             "Set CHESS_ANN_WSP_MODEL_PATH to an explicitly accepted WSP model."
         )
     MODEL_PATHS["wsp"] = Path(wsp_model_path)
-if MODEL_VERSION == "v1" and not MODEL_PATHS["v1"].is_file():
+if not MODEL_PATHS["v1"].is_file():
     MODEL_PATHS["v1"] = Path(__file__).with_name("model.npz")
-MODEL_PATH = MODEL_PATHS[MODEL_VERSION]
-if MODEL_PATH.is_file():
-    model = MLP.load(MODEL_PATH)
-    expected_size = LEGACY_INPUT_SIZE if MODEL_VERSION == "v1" else INPUT_SIZE
-    if model.W1.shape[0] != expected_size:
+
+MODELS: dict[str, MLP] = {}
+MODEL_STATUSES: dict[str, str] = {}
+for version, model_path in MODEL_PATHS.items():
+    if not model_path.is_file():
+        if version == "v1":
+            MODELS[version] = MLP(seed=7)
+            MODEL_STATUSES[version] = "untrained-random-initialization"
+            continue
+        if version == "v2":
+            continue
+        raise FileNotFoundError(f"Selected {version} model not found at {model_path}.")
+
+    loaded_model = MLP.load(model_path)
+    expected_size = LEGACY_INPUT_SIZE if version == "v1" else INPUT_SIZE
+    if loaded_model.W1.shape[0] != expected_size:
         raise ValueError(
-            f"Selected {MODEL_VERSION} model must use {expected_size} input features, "
-            f"received {model.W1.shape[0]}."
+            f"Model {version} must use {expected_size} input features, "
+            f"received {loaded_model.W1.shape[0]}."
         )
-    model_status = {
+    MODELS[version] = loaded_model
+    MODEL_STATUSES[version] = {
         "v1": "trained",
         "v2": "trained-v2",
         "wsp": "accepted-wsp",
-    }[MODEL_VERSION]
-else:
-    if MODEL_VERSION in ("v2", "wsp"):
-        raise FileNotFoundError(
-            f"Selected {MODEL_VERSION} model not found at {MODEL_PATH}; "
-            "provide the model before selecting this version."
-        )
-    model = MLP(seed=7)
-    model_status = "untrained-random-initialization"
+    }[version]
+
+if MODEL_VERSION not in MODELS:
+    raise FileNotFoundError(
+        f"Selected {MODEL_VERSION} model is unavailable at "
+        f"{MODEL_PATHS.get(MODEL_VERSION)}."
+    )
+
+# Keep these aliases for existing callers and tests; request-level model selection
+# uses MODELS directly and does not mutate the active default.
+model = MODELS[MODEL_VERSION]
+model_status = MODEL_STATUSES[MODEL_VERSION]
 
 
 class PositionRequest(BaseModel):
     fen: str = Field(default_factory=lambda: chess.STARTING_FEN)
+    model_version: str | None = None
 
 
 class MoveRequest(PositionRequest):
@@ -77,33 +93,57 @@ def parse_board(fen: str) -> chess.Board:
         raise HTTPException(status_code=422, detail=f"Invalid FEN: {error}") from error
 
 
-def encode_for_model(board: chess.Board):
-    if model.W1.shape[0] == LEGACY_INPUT_SIZE:
+def get_model(version: str | None = None) -> tuple[str, MLP]:
+    selected_version = MODEL_VERSION if version is None else version.lower()
+    selected_model = MODELS.get(selected_version)
+    if selected_model is None:
+        available = ", ".join(sorted(MODELS))
+        raise HTTPException(
+            status_code=422,
+            detail=f"Model '{selected_version}' is unavailable. Available models: {available}.",
+        )
+    return selected_version, selected_model
+
+
+def encode_for_model(board: chess.Board, selected_model: MLP | None = None):
+    selected_model = selected_model or model
+    if selected_model.W1.shape[0] == LEGACY_INPUT_SIZE:
         return encode_board_v1(board)
-    if model.W1.shape[0] == INPUT_SIZE:
+    if selected_model.W1.shape[0] == INPUT_SIZE:
         return encode_board(board)
-    raise ValueError(f"Unsupported model input dimension: {model.W1.shape[0]}")
+    raise ValueError(f"Unsupported model input dimension: {selected_model.W1.shape[0]}")
 
 
-def get_evaluation(board: chess.Board) -> tuple[float, float]:
-    white_score = model.forward(encode_for_model(board))
+def get_evaluation(
+    board: chess.Board, selected_model: MLP | None = None
+) -> tuple[float, float]:
+    selected_model = selected_model or model
+    white_score = selected_model.forward(encode_for_model(board, selected_model))
     turn_score = white_score if board.turn == chess.WHITE else -white_score
     return white_score, turn_score
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "model": model_status}
+def health() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "model": MODEL_VERSION,
+        "available_models": {
+            version: MODEL_STATUSES[version] for version in sorted(MODELS)
+        },
+    }
 
 
 @app.post("/api/evaluate")
 def evaluate_position(request: PositionRequest) -> dict[str, float | str]:
     board = parse_board(request.fen)
-    white_score, turn_score = get_evaluation(board)
+    model_version, selected_model = get_model(request.model_version)
+    white_score, turn_score = get_evaluation(board, selected_model)
     return {
         "white_score": white_score,
         "side_to_move_score": turn_score,
         "side_to_move": "white" if board.turn == chess.WHITE else "black",
+        "model_version": model_version,
     }
 
 
@@ -158,6 +198,7 @@ def play_move(request: MoveRequest) -> dict[str, object]:
 @app.post("/api/best-move")
 def best_move(request: PositionRequest) -> dict[str, str | float]:
     board = parse_board(request.fen)
+    model_version, selected_model = get_model(request.model_version)
     legal = list(board.legal_moves)
     if not legal:
         raise HTTPException(status_code=409, detail="There are no legal moves in this position.")
@@ -167,7 +208,7 @@ def best_move(request: PositionRequest) -> dict[str, str | float]:
     selected_score: float | None = None
     for move in legal:
         board.push(move)
-        white_score = model.forward(encode_for_model(board))
+        white_score = selected_model.forward(encode_for_model(board, selected_model))
         mover_score = white_score if moving_color == chess.WHITE else -white_score
         board.pop()
         if selected_score is None or mover_score > selected_score:
@@ -179,4 +220,5 @@ def best_move(request: PositionRequest) -> dict[str, str | float]:
         "uci": selected_move.uci(),
         "san": board.san(selected_move),
         "predicted_mover_score": selected_score,
+        "model_version": model_version,
     }

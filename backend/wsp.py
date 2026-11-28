@@ -1382,7 +1382,7 @@ def main() -> None:
     analyze.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     analyze.add_argument("--dataset", type=Path, required=True)
     analyze.add_argument("--output-dir", type=Path, default=DEFAULT_EXPERIMENTS)
-    analyze.add_argument("--model-id", default=_project_env_value("OPENROUTER_MODEL") or DEFAULT_MODEL_ID)
+    analyze.add_argument("--model-id")
     analyze.add_argument("--max-steps", type=int, default=10)
     analyze.add_argument("--propose-edit", action="store_true")
     analyze.add_argument(
@@ -1453,7 +1453,11 @@ def main() -> None:
             args.model,
             args.dataset,
             args.output_dir,
-            model_id=args.model_id,
+            model_id=(
+                args.model_id
+                or _project_env_value("OPENROUTER_MODEL")
+                or DEFAULT_MODEL_ID
+            ),
             max_steps=args.max_steps,
             allow_edit_proposal=args.propose_edit,
             question=args.question,

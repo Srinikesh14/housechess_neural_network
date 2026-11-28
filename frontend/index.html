@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f5f4f0">
     <title>House Chess</title>
-    <link rel="stylesheet" href="style.css?v=4">
+    <link rel="stylesheet" href="style.css?v=5">
   </head>
   <body>
     <div class="app-frame">
@@ -48,7 +48,17 @@
                 <span class="mode-tag">NEURAL NETWORK</span>
               </div>
               <h2>Play vs AI</h2>
-              <p>Take on the project's neural network. Choose your side and set a clock before the game begins.</p>
+              <p>Choose either saved neural-network version, then pick your side and clock.</p>
+              <div class="ai-model-heading">
+                <label class="setup-label" for="ai-model-version">Neural network version</label>
+                <button id="model-info-button" class="info-button" type="button" aria-haspopup="dialog">INFO</button>
+              </div>
+              <div class="setup-group model-select-group">
+                <select id="ai-model-version" class="select-control">
+                  <option value="v1">V1 · Original model</option>
+                  <option value="v2">V2 · Stockfish-trained</option>
+                </select>
+              </div>
               <div class="setup-group">
                 <span class="setup-label">I want to play as</span>
                 <div class="segmented" role="group" aria-label="Choose your color">
@@ -234,6 +244,33 @@
         </div>
       </form>
     </dialog>
-    <script src="script.js?v=6"></script>
+    <dialog id="model-info-dialog" class="app-dialog model-info-dialog" aria-labelledby="model-info-title">
+      <div class="model-info-content">
+        <p class="eyebrow">ABOUT THE AI</p>
+        <h2 id="model-info-title">Two NumPy neural networks</h2>
+        <p class="dialog-message">Both models evaluate positions from White's perspective and use the same one-ply move-selection method. Their input representation and training supervision differ.</p>
+        <div class="architecture-grid">
+          <article class="architecture-card">
+            <p class="eyebrow">V1 · ORIGINAL</p>
+            <h3>773 → 256 → 64 → 1</h3>
+            <p><strong>Activations:</strong> ReLU → ReLU → tanh</p>
+            <p><strong>Inputs:</strong> 12 piece planes, side to move, and castling rights.</p>
+            <p><strong>Training:</strong> Original game-outcome supervision.</p>
+          </article>
+          <article class="architecture-card">
+            <p class="eyebrow">V2 · STOCKFISH</p>
+            <h3>838 → 256 → 64 → 1</h3>
+            <p><strong>Activations:</strong> ReLU → ReLU → tanh</p>
+            <p><strong>Inputs:</strong> V1 features plus en-passant target and halfmove clock.</p>
+            <p><strong>Training:</strong> Stockfish evaluations of positions from a 400,000-game subset.</p>
+          </article>
+        </div>
+        <p class="model-info-note">V2 has different weights and features; it is not guaranteed to play stronger. This app's move choice evaluates each legal move one ply ahead—it does not use minimax search.</p>
+        <div class="dialog-actions">
+          <button id="model-info-close" class="primary-button" type="button">Got it</button>
+        </div>
+      </div>
+    </dialog>
+    <script src="script.js?v=7"></script>
   </body>
 </html>

@@ -172,6 +172,29 @@ class TrainingPipelineTests(unittest.TestCase):
         finally:
             api.model = original_model
 
+    def test_api_can_evaluate_and_play_with_both_models_in_one_process(self) -> None:
+        self.assertIn("v1", api.health()["available_models"])
+        self.assertIn("v2", api.health()["available_models"])
+        for version in ("v1", "v2"):
+            request = api.PositionRequest(
+                fen=chess.STARTING_FEN,
+                model_version=version,
+            )
+            evaluation = api.evaluate_position(request)
+            self.assertEqual(evaluation["model_version"], version)
+            self.assertTrue(np.isfinite(evaluation["white_score"]))
+            best_move = api.best_move(request)
+            self.assertEqual(best_move["model_version"], version)
+            self.assertIn(
+                best_move["uci"],
+                {move.uci() for move in chess.Board().legal_moves},
+            )
+
+        with self.assertRaisesRegex(api.HTTPException, "unavailable"):
+            api.evaluate_position(
+                api.PositionRequest(fen=chess.STARTING_FEN, model_version="v3")
+            )
+
     def test_checkpoint_round_trip_and_rejects_legacy_dimensions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "checkpoint.npz"

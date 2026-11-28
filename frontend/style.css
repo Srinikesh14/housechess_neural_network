@@ -188,6 +188,12 @@ h1 { margin: 0; color: #202b25; font-size: clamp(26px, 3vw, 35px); font-weight: 
 .mode-card > p.ai-disclaimer { min-height: 0; margin-top: 6px; color: #8a937f; font-size: 10px; }
 .setup-group { margin-top: 17px; }
 .setup-label { display: block; margin-bottom: 8px; color: #59645b; font-size: 11px; font-weight: 650; }
+.ai-model-heading { display: flex; align-items: center; justify-content: space-between; margin-top: 17px; }
+.ai-model-heading .setup-label { margin: 0; }
+.model-select-group { margin-top: 8px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
+.info-button { min-width: 46px; min-height: 27px; padding: 0 8px; border: 1px solid #dfe5dc; border-radius: 6px; background: var(--surface-soft); color: var(--green-dark); cursor: pointer; font-size: 9px; font-weight: 750; letter-spacing: .6px; }
+.info-button:hover { border-color: #b7c9b8; background: var(--green-soft); }
 .segmented { display: flex; gap: 6px; }
 .choice-button { flex: 1; min-height: 35px; padding: 0 8px; border: 1px solid #e6e8e2; border-radius: 7px; background: #fff; color: #687168; cursor: pointer; font-size: 11px; }
 .choice-button:hover { background: #f8faf7; }
@@ -370,6 +376,19 @@ h1 { margin: 0; color: #202b25; font-size: clamp(26px, 3vw, 35px); font-weight: 
 .promotion-choice { display: grid; min-height: 76px; justify-items: center; align-content: center; gap: 3px; border: 1px solid #e5e7e1; border-radius: 8px; background: #fff; color: #798178; cursor: pointer; font-size: 9px; }
 .promotion-choice:hover { border-color: #b6c8b7; background: #f4f8f3; }
 .promotion-choice span { font: 34px "Segoe UI Symbol", sans-serif; }
+.model-info-dialog { width: min(700px, calc(100% - 28px)); }
+.model-info-content { padding: 24px; }
+.model-info-content > .dialog-message { margin-bottom: 17px; }
+.architecture-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.architecture-card { padding: 15px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); }
+.architecture-card .eyebrow { margin-bottom: 7px; }
+.architecture-card h3 { margin: 0 0 11px; color: var(--ink); font-size: 15px; }
+.architecture-card p:not(.eyebrow) { margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.architecture-card p strong { color: var(--ink); }
+.model-info-note { margin: 14px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+body[data-mode="dark"] .info-button { border-color: var(--line); background: #222a25; color: #c2d7c3; }
+body[data-mode="dark"] .info-button:hover { background: #29382d; }
+body[data-mode="dark"] .architecture-card { border-color: var(--line); background: var(--surface-soft); }
 
 @media (min-width: 1450px) {
   .main-content { padding-right: 60px; padding-left: 60px; }
@@ -448,4 +467,6 @@ h1 { margin: 0; color: #202b25; font-size: clamp(26px, 3vw, 35px); font-weight: 
   .history-moves { grid-column: 1 / -1; }
   .setting-row { flex-direction: column; gap: 11px; }
   .theme-options { align-self: stretch; justify-content: flex-start; }
+  .architecture-grid { grid-template-columns: 1fr; }
+  .model-info-content { padding: 19px; }
 }
